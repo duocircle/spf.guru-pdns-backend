@@ -1,0 +1,31 @@
+services:
+  pdns:
+    image: powerdns/pdns-auth-50:latest
+    container_name: pdns-auth
+    restart: unless-stopped
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    volumes:
+      - ./pdns.conf.example:/etc/powerdns/pdns.conf:ro
+    depends_on:
+      - checkspf
+    networks:
+      - pdnsnet
+
+  checkspf:
+    image: ghcr.io/smck83/spf.guru-pdns-backend:latest
+    container_name: spf-remote-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      ZONE: "my.example.org"
+      NS_RECORDS: "ns-spfguru1.example.org ns-spfguru2.example.org"
+      SOA_HOSTMASTER: "the-hostmaster@example.org"
+    networks:
+      - pdnsnet
+
+networks:
+  pdnsnet:
+    driver: bridge
