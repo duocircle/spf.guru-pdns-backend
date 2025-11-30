@@ -1,17 +1,27 @@
-FROM python:3-slim
-LABEL maintainer="s@mck.la"
-ENV MY_APP_PATH=/opt/checkspf
+FROM python:3.12-slim
+LABEL maintainer="support@duocircle.com"
 
-ARG SOA_SERIAL=2025080300
-ENV SOA_SERIAL=${SOA_SERIAL}
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    && mkdir -p $MY_APP_PATH/data
-# ADD run.py main.py kv.py spfcustom.py $MY_APP_PATH
-COPY run.py main.py dbInsert.py spfGuruBackend.py $MY_APP_PATH/
-RUN pip install fastapi uvicorn["standard"] pyspf py3dns dnspython redis cachetools aiocache aiohttp
-WORKDIR $MY_APP_PATH/
+WORKDIR /app
 
-ENTRYPOINT ["python3", "-u", "/opt/checkspf/run.py"]
+# Install pip-tools for dependency management
+RUN pip install --no-cache-dir pip-tools
+
+# Copy requirements files
+COPY requirements.in .
+
+# Compile and install dependencies
+RUN pip-compile requirements.in -o requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application source
+COPY src/ ./src/
+
+# Set Python path
+ENV PYTHONPATH=/app/src
 
 EXPOSE 8000/tcp
+
+ENTRYPOINT ["python", "-m", "spf_guru"]

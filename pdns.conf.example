@@ -1,23 +1,31 @@
-###############################################################################
-# PowerDNS Authoritative – Example only
-###############################################################################
+# PowerDNS configuration for SPF Guru remote backend
 
-# Back-ends ───────────────────────────────────────────────────────────────────
-launch=remote                          # use remote backend only
-remote-connection-string=http:url=http://checkspf:8000,timeout=4000}
-# Web API / control plane ─────────────────────────────────────────────────────
+# Launch remote backend
+launch=remote
+# remote-connection-string=http:url=http://backend:8000
+remote-connection-string=http:url=http://host.docker.internal:4080
+
+# DNS settings
+local-address=0.0.0.0
+local-port=53
+
+# API settings (optional, for debugging)
+api=yes
+api-key=changeme
 webserver=yes
 webserver-address=0.0.0.0
 webserver-port=8081
 webserver-allow-from=0.0.0.0/0
 
-api=no
-
-# Logging ─────────────────────────────────────────────────────────────────────
-log-dns-queries=yes
+# Logging
 loglevel=6
+log-dns-queries=yes
 log-dns-details=yes
 
-# Disable security-poll-suffix ────────────────────────────────────────────────
-security-poll-suffix=
+# Performance
+cache-ttl=60
+query-cache-ttl=60
 
+# Security
+allow-axfr-ips=
+disable-axfr=yes

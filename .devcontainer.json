@@ -1,0 +1,29 @@
+{
+  "name": "spf-guru",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "workspaceFolder": "/app",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind",
+  "appPort": ["4080:8000"],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscode-icons-team.vscode-icons",
+        "ms-python.python",
+        "ms-python.pylint",
+        "ms-python.black-formatter",
+        "GitHub.copilot",
+        "eamodio.gitlens",
+        "HoangKimLai.ipython"
+      ]
+    }
+  },
+  "runArgs": ["--init"],
+  "overrideCommand": true,
+  "postStartCommand": "uvicorn spf_guru.app:app --host 0.0.0.0 --port 8000 --reload --reload-dir src",
+  "remoteUser": "root"
+}

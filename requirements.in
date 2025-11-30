@@ -1,0 +1,22 @@
+# Core web framework
+fastapi>=0.122.0
+uvicorn[standard]>=0.38.0
+
+# DNS libraries
+dnspython>=2.8.0
+pyspf>=2.0.14
+py3dns>=4.0.2
+
+# Caching
+redis>=7.1.0
+aiocache>=0.12.3
+cachetools>=6.2.2
+
+# HTTP client for database logging
+aiohttp>=3.13.2
+
+# Settings management
+pydantic-settings>=2.12.0
+
+# Error tracking (optional)
+sentry-sdk[fastapi]>=2.29.1
