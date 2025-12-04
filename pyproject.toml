@@ -27,3 +27,11 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
 ]
+
+[tool.pylint.messages_control]
+disable = [
+    "W0718",  # broad-exception-caught - acceptable for Redis/network error handling
+    "W1203",  # logging-fstring-interpolation - f-strings are fine, perf impact negligible
+    "W0603",  # global-statement - used for singleton pattern, acceptable
+    "W0706",  # try-except-raise - used for CancelledError propagation
+]

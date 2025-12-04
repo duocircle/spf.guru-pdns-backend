@@ -5,9 +5,8 @@ import re
 from typing import List, Optional
 
 from spf_guru.core.config import Settings, get_settings
+from spf_guru.core.whitelist import WhitelistManager, get_whitelist_manager
 
-# Sentinel value for unauthorized SPF
-UNAUTH_SENTINEL = "v=spf1 ?all"
 
 # Precompiled regex patterns for IP validation
 _RE_IPV4 = re.compile(
@@ -117,7 +116,7 @@ def sanitize_spf_record(spf_record: str, settings: Optional[Settings] = None) ->
 
         return " ".join(filtered)
 
-    return UNAUTH_SENTINEL
+    return get_unauth_sentinel()
 
 
 def dot_count(s: str) -> int:
@@ -141,7 +140,7 @@ def is_ipv6(input_string: str) -> str | bool:
     if match:
         try:
             result = str(ipaddress.ip_address(dot2std(input_string)))
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             return False
         return result
 
@@ -167,7 +166,7 @@ def is_ipv4(input_string: str) -> str | bool:
     if match:
         try:
             result = str(ipaddress.ip_address(input_string))
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             return False
         return reverse_ip(result)
 
@@ -175,7 +174,9 @@ def is_ipv4(input_string: str) -> str | bool:
 
 
 async def extract_info(
-    input_string: str, settings: Optional[Settings] = None
+    input_string: str,
+    settings: Optional[Settings] = None,
+    whitelist: Optional[WhitelistManager] = None,
 ) -> dict | bool:
     """
     Extract domain and IP information from a DNS query name.
@@ -249,10 +250,11 @@ async def extract_info(
     else:
         return False
 
-    # Domain control list check
-    my_domains = settings.my_domains_set
+    # Domain control list check - use dynamic whitelist manager
+    if whitelist is None:
+        whitelist = get_whitelist_manager()
 
-    if my_domains and domain not in my_domains:
+    if not whitelist.is_allowed(domain):
         return False
 
     ver = dot_count(ip_address)
@@ -333,3 +335,11 @@ def return_ns(qname: str, settings: Optional[Settings] = None) -> list[dict]:
         )
 
     return output
+
+
+def get_unauth_sentinel(settings: Settings | None = None) -> str:
+    """Return unauthorized SPF sentinel value."""
+    if settings is None:
+        settings = get_settings()
+
+    return f"{settings.spf_prefix} ?all"

@@ -68,11 +68,11 @@ class TestCacheManager:
         result = await manager.get("injected")
         assert result == "value"
 
-    async def test_log_output(self, capsys):
+    async def test_log_output(self, caplog):
         manager = CacheManager()
-        await manager.set("key", "value", ttl=300, log=True)
-        captured = capsys.readouterr()
-        assert "key added to cache" in captured.out
+        with caplog.at_level("INFO"):
+            await manager.set("key", "value", ttl=300, log=True)
+        assert "key added to cache" in caplog.text
 
 
 class TestModuleFunctions:

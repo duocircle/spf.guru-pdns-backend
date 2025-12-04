@@ -53,7 +53,8 @@ _dependencies: Optional[RouteDependencies] = None
 
 def get_dependencies() -> RouteDependencies:
     """Get the current route dependencies."""
-    global _dependencies  # pylint: disable=global-statement
+    global _dependencies
+
     if _dependencies is None:
         _dependencies = RouteDependencies()
     return _dependencies
@@ -61,13 +62,15 @@ def get_dependencies() -> RouteDependencies:
 
 def set_dependencies(deps: RouteDependencies) -> None:
     """Set custom dependencies (useful for testing)."""
-    global _dependencies  # pylint: disable=global-statement
+    global _dependencies
+
     _dependencies = deps
 
 
 def reset_dependencies() -> None:
     """Reset dependencies to default (useful for testing)."""
-    global _dependencies  # pylint: disable=global-statement
+    global _dependencies
+
     _dependencies = None
 
 
@@ -95,6 +98,7 @@ async def _spf_check(
     if cached := await cache.get(cache_key):
         result = json.loads(cached)
         result["cached"] = True
+
         return result
 
     # Get SPF data
@@ -119,14 +123,19 @@ async def _spf_check(
 
     # Build response
     resp = {"domain": domain, "ip": ip_address, "pass": allowed}
-    resp["spf_pass_response"] = f"v=spf1 ip{ip_version(ip_address)}:{ip_address} ~all"
+    resp["spf_pass_response"] = (
+        f"{settings.spf_prefix} ip{ip_version(ip_address)}:{ip_address}{settings.spf_suffix}"
+    )
 
     if len(macros) > 0:
         resp["spf_fail_response"] = (
-            "v=spf1 " + " ".join(macros[: settings.max_chain]) + " ~all"
+            settings.spf_prefix
+            + " "
+            + " ".join(macros[: settings.max_chain])
+            + settings.spf_suffix
         )
     else:
-        resp["spf_fail_response"] = "v=spf1 ~all"
+        resp["spf_fail_response"] = f"{settings.spf_prefix}{settings.spf_suffix}"
 
     # Cache result
     await cache.set(cache_key, json.dumps(resp), settings.default_ttl, log=False)
@@ -139,7 +148,7 @@ async def _spf_check(
             await deps.log_spf_result_fn(
                 domain, ip_address, result_label, ip_version(ip_address)
             )
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             # Database logging is non-critical, capture but don't fail
             capture_exception(
                 DatabaseError(f"Failed to log SPF result: {e}"),
@@ -169,7 +178,7 @@ async def lookup(
     except ValueError:
         # Invalid input format - expected, not an error
         info = False
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         # Unexpected error in pattern matching - report to Sentry
         capture_exception(
             PatternMatchError(f"Pattern extraction failed: {e}"),
@@ -209,10 +218,12 @@ async def lookup(
             capture_exception(
                 e, {"domain": domain_part, "ip": ip_part}, level="warning"
             )
+
             return {"result": responses}
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             # Unexpected error - report to Sentry and return empty
             capture_exception(e, {"domain": domain_part, "ip": ip_part})
+
             return {"result": responses}
 
         if spf_output["pass"]:
@@ -242,7 +253,7 @@ async def lookup(
                     }
                 )
             else:
-                content = "v=spf1 ~all"
+                content = f"{settings.spf_prefix}{settings.spf_suffix}"
         elif check_for_fail is False:
             if spf_output["pass"]:
                 content = spf_output["spf_pass_response"]
@@ -267,7 +278,7 @@ async def lookup(
             else:
                 content = spf_output["spf_fail_response"]
         else:
-            content = "v=spf1 ?all"
+            content = f"{settings.spf_prefix} ?all"
 
         responses.append(
             {

@@ -6,7 +6,7 @@ import pytest
 
 from spf_guru.core.config import Settings
 from spf_guru.dns.patterns import (
-    UNAUTH_SENTINEL,
+    get_unauth_sentinel,
     dot2std,
     dot_count,
     extract_info,
@@ -18,6 +18,18 @@ from spf_guru.dns.patterns import (
     reverse_ip,
     sanitize_spf_record,
 )
+
+
+class MockWhitelistManager:
+    """Mock whitelist manager for testing."""
+
+    def __init__(self, allowed_domains: set[str] | None = None):
+        self._domains = {d.lower() for d in (allowed_domains or set())}
+
+    def is_allowed(self, domain: str) -> bool:
+        if not self._domains:
+            return True
+        return domain.lower().strip() in self._domains
 
 
 @pytest.fixture
@@ -125,7 +137,8 @@ class TestSanitizeSpfRecord:
 
     def test_returns_unauth_sentinel_when_no_match(self, test_settings):
         result = sanitize_spf_record("v=spf1 ip4:1.2.3.4 ~all", settings=test_settings)
-        assert result == UNAUTH_SENTINEL
+
+        assert result == get_unauth_sentinel(test_settings)
 
     def test_removes_special_spf_tokens(self):
         settings = Settings(
@@ -138,6 +151,7 @@ class TestSanitizeSpfRecord:
             "v=spf1 include:special.record ip4:1.2.3.4 ~all",
             settings=settings,
         )
+
         assert "include:special.record" not in result
         assert "ip4:1.2.3.4" in result
 
@@ -259,9 +273,10 @@ class TestExtractInfo:
             my_domains="allowed.com",
             _env_file=None,
         )
+        whitelist = MockWhitelistManager(allowed_domains={"allowed.com"})
 
         query = "1.1.168.192.notallowed.com.my.spf.guru."
-        result = await extract_info(query, settings=settings)
+        result = await extract_info(query, settings=settings, whitelist=whitelist)
 
         # Should return False because domain is not in allowed list
         assert result is False
@@ -273,9 +288,10 @@ class TestExtractInfo:
             my_domains="allowed.com",
             _env_file=None,
         )
+        whitelist = MockWhitelistManager(allowed_domains={"allowed.com"})
 
         query = "1.1.168.192.allowed.com.my.spf.guru."
-        result = await extract_info(query, settings=settings)
+        result = await extract_info(query, settings=settings, whitelist=whitelist)
 
         assert result is not False
         assert result["domain"] == "allowed.com"

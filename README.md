@@ -20,19 +20,73 @@ All configuration is done via environment variables:
 |----------|-------------|---------|
 | `ZONE` | DNS zone to serve | `my.spf.guru` |
 | `NS_RECORDS` | Space-separated list of NS records | `ns-{ZONE}` |
-| `SOA_SERIAL` | SOA serial number | `2025080300` |
-| `SOA_HOSTMASTER` | SOA hostmaster email | `hostmaster@example.com` |
-| `MY_DOMAINS` | Space-separated domain whitelist | (none) |
+| `SOA_SERIAL` | SOA serial number | `2025120400` |
+| `SOA_HOSTMASTER` | SOA hostmaster email | `hostmaster@duocircle.com` |
+| `MY_DOMAINS` | Space-separated domain whitelist (fallback) | (none) |
 | `SOURCE_PREFIX` | Prefix for SPF lookups | (none) |
 | `SPF_RECORD_MODE` | Pattern matching mode (0=standard, 1=rbldnsd) | `0` |
 | `SPF_MACRO_RECORD` | Custom SPF macro template | (auto-generated) |
-| `REDIS_IP` | Redis server IP (enables caching) | (none) |
+| `SPF_PREFIX` | SPF record prefix | `v=spf1` |
+| `SPF_SUFFIX` | SPF record suffix | ` ~all` |
+| `REDIS_IP` | Redis server IP (enables caching + Pub/Sub) | (none) |
 | `REDIS_PORT` | Redis server port | `6379` |
+| `REDIS_DB` | Redis database number | `0` |
 | `BUNNY_DB_URL` | Database logging URL | (none) |
 | `BUNNY_DB_TOKEN` | Database logging token | (none) |
 | `SENTRY_DSN` | Sentry DSN for error tracking | (none) |
 | `SENTRY_ENVIRONMENT` | Sentry environment name | `production` |
 | `SENTRY_TRACES_SAMPLE_RATE` | Sentry traces sample rate | `1.0` |
+
+## Redis Integration
+
+When `REDIS_IP` is configured, the backend uses Redis for:
+
+1. **SPF Result Caching** - Caches SPF lookup results for improved performance
+2. **Domain Whitelist Persistence** - Stores allowed domains in Redis SET `spf:allowed_domains`
+3. **Pub/Sub Events** - Listens for domain whitelist updates via Redis Pub/Sub
+
+### Pub/Sub Channels
+
+The backend subscribes to these channels for real-time whitelist updates:
+
+| Channel | Message Format | Description |
+|---------|---------------|-------------|
+| `spf:domains:list` | `domain1,domain2,...` | Replace entire whitelist |
+| `spf:domains:add` | `domain` | Add single domain |
+| `spf:domains:remove` | `domain` | Remove domain and invalidate cache |
+
+See [docs/DMARCREPORT_INTEGRATION.md](docs/DMARCREPORT_INTEGRATION.md) for integration details.
+
+### Testing Pub/Sub
+
+A Ruby script is provided for testing Pub/Sub integration:
+
+```bash
+# Using Docker Compose
+docker compose --profile testing up pubsub-tester
+
+# Or run directly with Ruby
+ruby scripts/test_pubsub.rb
+
+# With custom Redis host
+REDIS_HOST=localhost ruby scripts/test_pubsub.rb
+```
+
+The script provides an interactive menu to publish test messages to all channels.
+
+### Health Check
+
+The `/healthcheck` endpoint returns the current status:
+
+```json
+{
+  "status": "ok",
+  "initialized": true,
+  "domain_count": 42,
+  "redis_connected": true,
+  "pubsub_active": true
+}
+```
 
 ## Development
 
@@ -106,6 +160,7 @@ spf.guru-pdns-backend/
 │       ├── app.py              # FastAPI application
 │       ├── api/
 │       │   ├── __init__.py
+│       │   ├── healthcheck.py  # Health check endpoint
 │       │   ├── models.py       # Pydantic schemas
 │       │   └── routes.py       # API endpoints
 │       ├── core/
@@ -113,7 +168,8 @@ spf.guru-pdns-backend/
 │       │   ├── cache.py        # Redis/memory cache
 │       │   ├── config.py       # Settings management
 │       │   ├── database.py     # Database logging
-│       │   └── extractor.py    # SPF extraction
+│       │   ├── extractor.py    # SPF extraction
+│       │   └── whitelist.py    # Domain whitelist with Pub/Sub
 │       ├── dns/
 │       │   ├── __init__.py
 │       │   ├── patterns.py     # DNS pattern matching
@@ -121,9 +177,15 @@ spf.guru-pdns-backend/
 │       └── utils/
 │           ├── __init__.py
 │           ├── banners.py      # Fortune banners
-│           └── decorators.py   # Sentry integration
+│           ├── decorators.py   # Sentry integration
+│           └── exceptions.py   # Custom exceptions
+├── docs/
+│   └── DMARCREPORT_INTEGRATION.md  # Integration guide
+├── scripts/
+│   └── test_pubsub.rb          # Pub/Sub testing utility
 ├── requirements.in             # Production dependencies
 ├── requirements-dev.in         # Development dependencies
+├── docker-compose.yaml
 ├── Dockerfile
 └── README.md
 ```

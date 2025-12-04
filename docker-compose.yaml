@@ -1,31 +1,81 @@
-services:
-  pdns:
-    image: powerdns/pdns-auth-50:latest
-    container_name: pdns-auth
-    restart: unless-stopped
-    ports:
-      - "53:53/udp"
-      - "53:53/tcp"
-    volumes:
-      - ./pdns.conf.example:/etc/powerdns/pdns.conf:ro
-    depends_on:
-      - checkspf
-    networks:
-      - pdnsnet
+name: spf-guru
 
-  checkspf:
-    image: ghcr.io/smck83/spf.guru-pdns-backend:latest
-    container_name: spf-remote-backend
-    restart: unless-stopped
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: spf-guru-redis
+    # ports:
+    #   - "6376:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - spf-guru-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  powerdns:
+    image: powerdns/pdns-auth-49:latest
+    container_name: spf-guru-pdns
+    ports:
+      - "5353:53/udp"
+      - "5353:53/tcp"
+      - "8081:8081"  # PowerDNS web API
+    environment:
+      - PDNS_AUTH_API_KEY=changeme
+    volumes:
+      - ./pdns.conf:/etc/powerdns/pdns.conf:ro
+    networks:
+      - spf-guru-network
+    # depends_on:
+    #   backend:
+    #     condition: service_started
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spf-guru-backend
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      ZONE: "my.example.org"
-      NS_RECORDS: "ns-spfguru1.example.org ns-spfguru2.example.org"
-      SOA_HOSTMASTER: "the-hostmaster@example.org"
+      - REDIS_IP=redis
+      - REDIS_PORT=6379
     networks:
-      - pdnsnet
+      - spf-guru-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["uvicorn", "spf_guru.app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  # Ruby test service for Pub/Sub testing
+  pubsub-tester:
+    image: ruby:3.2-alpine
+    container_name: spf-guru-pubsub-tester
+    working_dir: /app
+    volumes:
+      - ./scripts:/app
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - spf-guru-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command: ["gem install redis && echo 'Ready! Run: docker exec -it spf-guru-pubsub-tester ruby test_pubsub.rb interactive' && tail -f /dev/null"]
+    profiles:
+      - testing
 
 networks:
-  pdnsnet:
+  spf-guru-network:
+    name: spf-guru-network
     driver: bridge
+
+volumes:
+  redis-data:

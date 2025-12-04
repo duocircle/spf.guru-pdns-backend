@@ -1,5 +1,7 @@
 """SPF record extraction and flattening logic."""
 
+# pylint: disable=missing-function-docstring
+
 import asyncio
 import ipaddress
 import json
@@ -15,19 +17,13 @@ from spf_guru.utils.exceptions import SPFExtractionError, capture_exception
 class DNSResolver(Protocol):
     """Protocol for DNS resolution operations."""
 
-    async def get_txt_records(  # pylint: disable=missing-function-docstring
-        self, domain: str
-    ) -> Tuple[list[str], Optional[int]]: ...
+    async def get_txt_records(self, domain: str) -> Tuple[list[str], Optional[int]]: ...
 
-    async def resolve_a(  # pylint: disable=missing-function-docstring
-        self, domain: str
-    ) -> Tuple[list[str], Optional[int]]: ...
+    async def resolve_a(self, domain: str) -> Tuple[list[str], Optional[int]]: ...
 
-    async def resolve_aaaa(  # pylint: disable=missing-function-docstring
-        self, domain: str
-    ) -> Tuple[list[str], Optional[int]]: ...
+    async def resolve_aaaa(self, domain: str) -> Tuple[list[str], Optional[int]]: ...
 
-    async def get_mx_ips(  # pylint: disable=missing-function-docstring
+    async def get_mx_ips(
         self, domain: str
     ) -> Tuple[list[str], list[Optional[int]]]: ...
 
@@ -36,24 +32,16 @@ class DNSResolver(Protocol):
 class DefaultDNSResolver:
     """Default DNS resolver using the dns.resolver module."""
 
-    async def get_txt_records(  # pylint: disable=missing-function-docstring
-        self, domain: str
-    ) -> Tuple[list[str], Optional[int]]:
+    async def get_txt_records(self, domain: str) -> Tuple[list[str], Optional[int]]:
         return await get_txt_records(domain)
 
-    async def resolve_a(  # pylint: disable=missing-function-docstring
-        self, domain: str
-    ) -> Tuple[list[str], Optional[int]]:
+    async def resolve_a(self, domain: str) -> Tuple[list[str], Optional[int]]:
         return await resolve_a(domain)
 
-    async def resolve_aaaa(  # pylint: disable=missing-function-docstring
-        self, domain: str
-    ) -> Tuple[list[str], Optional[int]]:
+    async def resolve_aaaa(self, domain: str) -> Tuple[list[str], Optional[int]]:
         return await resolve_aaaa(domain)
 
-    async def get_mx_ips(  # pylint: disable=missing-function-docstring
-        self, domain: str
-    ) -> Tuple[list[str], list[Optional[int]]]:
+    async def get_mx_ips(self, domain: str) -> Tuple[list[str], list[Optional[int]]]:
         return await get_mx_ips(domain)
 
 
@@ -268,7 +256,7 @@ _extractor: Optional[SPFExtractor] = None
 
 def get_extractor() -> SPFExtractor:
     """Get or create the default SPF extractor."""
-    global _extractor  # pylint: disable=global-statement
+    global _extractor
 
     if _extractor is None:
         _extractor = SPFExtractor()
@@ -278,13 +266,15 @@ def get_extractor() -> SPFExtractor:
 
 def set_extractor(extractor: SPFExtractor) -> None:
     """Set a custom extractor (useful for testing)."""
-    global _extractor  # pylint: disable=global-statement
+    global _extractor
+
     _extractor = extractor
 
 
 def reset_extractor() -> None:
     """Reset the extractor (useful for testing)."""
-    global _extractor  # pylint: disable=global-statement
+    global _extractor
+
     _extractor = None
 
 

@@ -1,21 +1,23 @@
 """Cache abstraction layer supporting Redis and in-memory backends."""
 
-import sys
+# pylint: disable=missing-function-docstring
+
+import logging
 from typing import Optional, Protocol
 
 import redis.asyncio as aioredis
 from aiocache import SimpleMemoryCache
 
 
+logger = logging.getLogger(__name__)
+
+
 class CacheBackend(Protocol):
     """Protocol for cache backends."""
 
-    async def get(  # pylint: disable=missing-function-docstring
-        self, key: str
-    ) -> Optional[str]: ...
-    async def set(  # pylint: disable=missing-function-docstring
-        self, key: str, value: str, ttl: int
-    ) -> None: ...
+    async def get(self, key: str) -> Optional[str]: ...
+    async def set(self, key: str, value: str, ttl: int) -> None: ...
+    async def delete(self, key: str) -> bool: ...
 
 
 class RedisCache:
@@ -36,6 +38,10 @@ class RedisCache:
         """Set value in Redis with TTL."""
         await self._client.set(key, value, ex=ttl)
 
+    async def delete(self, key: str) -> bool:
+        """Delete key from Redis. Returns True if key existed."""
+        return await self._client.delete(key) > 0
+
 
 class MemoryCache:
     """In-memory cache backend using aiocache."""
@@ -50,6 +56,10 @@ class MemoryCache:
     async def set(self, key: str, value: str, ttl: int) -> None:
         """Set value in memory cache with TTL."""
         await self._cache.set(key, value, ttl=ttl)
+
+    async def delete(self, key: str) -> bool:
+        """Delete key from memory cache. Returns True if key existed."""
+        return await self._cache.delete(key)
 
 
 class CacheManager:
@@ -81,7 +91,16 @@ class CacheManager:
         await self._get_backend().set(key, value, ttl)
 
         if log:
-            sys.stdout.write(f"{key} added to cache.\n")
+            logger.info(f"{key} added to cache")
+
+    async def delete(self, key: str) -> bool:
+        """Delete key from cache. Returns True if key existed."""
+        deleted = await self._get_backend().delete(key)
+
+        if deleted:
+            logger.info(f"{key} removed from cache")
+
+        return deleted
 
 
 # Default cache manager instance
@@ -90,7 +109,7 @@ _cache_manager: Optional[CacheManager] = None
 
 def get_cache_manager() -> CacheManager:
     """Get or create the default cache manager."""
-    global _cache_manager  # pylint: disable=global-statement
+    global _cache_manager
 
     if _cache_manager is None:
         _cache_manager = CacheManager()
@@ -105,13 +124,15 @@ def init_cache(use_redis: bool = False, redis_url: Optional[str] = None) -> None
 
 def set_cache_manager(manager: CacheManager) -> None:
     """Set a custom cache manager (useful for testing)."""
-    global _cache_manager  # pylint: disable=global-statement
+    global _cache_manager
+
     _cache_manager = manager
 
 
 def reset_cache_manager() -> None:
     """Reset the cache manager (useful for testing)."""
-    global _cache_manager  # pylint: disable=global-statement
+    global _cache_manager
+
     _cache_manager = None
 
 
@@ -123,3 +144,8 @@ async def cache_get(key: str) -> Optional[str]:
 async def cache_set(key: str, value: str, ttl: int, log: bool = False) -> None:
     """Set value in cache with TTL."""
     await get_cache_manager().set(key, value, ttl, log)
+
+
+async def cache_delete(key: str) -> bool:
+    """Delete key from cache. Returns True if key existed."""
+    return await get_cache_manager().delete(key)

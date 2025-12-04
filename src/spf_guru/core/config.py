@@ -9,8 +9,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 def _ensure_dot(s: str) -> str:
     """Ensure string ends with a dot (for DNS names)."""
     s = s.strip()
+
     if not s.endswith("."):
         s += "."
+
     return s
 
 
@@ -26,15 +28,16 @@ class Settings(BaseSettings):
     # Redis configuration
     redis_ip: Optional[str] = None
     redis_port: int = 6379
+    redis_db: int = 0
 
     # DNS zone configuration
     zone: str = "my.spf.guru"
-    soa_serial: str = "2025080300"
-    soa_hostmaster: str = "hostmaster@example.com"
+    soa_serial: str = "2025120400"
+    soa_hostmaster: str = "hostmaster@duocircle.com"
     ns_records: str = ""  # Space-separated list of NS records
 
     # Domain control list (whitelist)
-    my_domains: str = ""  # Space-separated list of allowed domains
+    my_domains: str = ""  # Space-separated list of allowed domains (fallback)
 
     # SPF configuration
     source_prefix: Optional[str] = None
@@ -51,8 +54,6 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 1.0
 
     # SPF processing constants
-    zone_base: str = "zen.spf.guru"
-    txt_seg_limit: int = 500
     spf_prefix: str = "v=spf1"
     spf_suffix: str = " ~all"
     max_chain: int = 9
@@ -67,6 +68,7 @@ class Settings(BaseSettings):
     def soa_hostmaster_dotted(self) -> str:
         """Return SOA hostmaster formatted for DNS (@ replaced with .)."""
         hostmaster = self.soa_hostmaster.replace("@", ".")
+
         return _ensure_dot(hostmaster)
 
     @property
@@ -75,6 +77,7 @@ class Settings(BaseSettings):
         if not self.ns_records.strip():
             # Default NS record based on zone
             return [_ensure_dot(f"ns-{self.zone}")]
+
         return [_ensure_dot(ns) for ns in self.ns_records.lower().split()]
 
     @property
@@ -87,6 +90,7 @@ class Settings(BaseSettings):
         """Return allowed domains as a set."""
         if not self.my_domains.strip():
             return set()
+
         return set(self.my_domains.lower().split())
 
     @property
@@ -94,6 +98,7 @@ class Settings(BaseSettings):
         """Return the SPF macro record template."""
         if self.spf_macro_record:
             return self.spf_macro_record
+
         return f"i.%{{ir}}._d.%{{d}}.{self.zone_dotted}"
 
     @property
@@ -109,7 +114,7 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         """Return Redis connection URL."""
-        return f"redis://{self.redis_ip}:{self.redis_port}/0"
+        return f"redis://{self.redis_ip}:{self.redis_port}/{self.redis_db}"
 
 
 @lru_cache
