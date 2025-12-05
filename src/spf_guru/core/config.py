@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
 
+    # Sync configuration for requesting domain list from dmarcreport
+    sync_enabled: bool = False  # Enable periodic sync requests
+    sync_interval: int = 300  # Interval in seconds (5 minutes)
+
     # DNS zone configuration
     zone: str = "my.spf.guru"
     soa_serial: str = "2025120400"

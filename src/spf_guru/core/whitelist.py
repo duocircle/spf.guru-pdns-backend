@@ -24,6 +24,9 @@ CHANNEL_DOMAINS_LIST = "spf:domains:list"  # Full domain list sync
 CHANNEL_DOMAINS_ADD = "spf:domains:add"  # Single domain added
 CHANNEL_DOMAINS_REMOVE = "spf:domains:remove"  # Single domain removed
 
+# Redis Pub/Sub channel (request TO dmarcreport)
+CHANNEL_DOMAINS_SYNC_REQUEST = "spf:domains:sync_request"  # Request full sync
+
 
 @dataclass
 class DomainInfo:
@@ -100,6 +103,12 @@ class WhitelistManager:
         # Flag to track if initial sync completed
         self._initialized = False
 
+        # Background task for periodic sync requests
+        self._sync_task: Optional[asyncio.Task] = None
+
+        # Sync interval from settings
+        self._sync_interval: int = self._settings.sync_interval
+
     @property
     def domains(self) -> Set[str]:
         """Return current whitelisted domains as a set."""
@@ -153,6 +162,15 @@ class WhitelistManager:
 
     async def close(self) -> None:
         """Cleanup resources."""
+        # Stop periodic sync task
+        if self._sync_task and not self._sync_task.done():
+            self._sync_task.cancel()
+
+            try:
+                await self._sync_task
+            except asyncio.CancelledError:
+                pass
+
         # Stop Pub/Sub listener
         if self._pubsub_task and not self._pubsub_task.done():
             self._pubsub_task.cancel()
@@ -313,8 +331,60 @@ class WhitelistManager:
 
             # Start listener task
             self._pubsub_task = asyncio.create_task(self._pubsub_listener_loop())
+
+            # Start periodic sync request task (if enabled)
+            if self._settings.sync_enabled:
+                self._sync_task = asyncio.create_task(self._periodic_sync_loop())
+            else:
+                logger.info("Periodic sync disabled (set SYNC_ENABLED=true to enable)")
         except Exception as e:
             logger.error(f"Failed to start Pub/Sub listener: {e}")
+
+    async def request_sync(self) -> bool:
+        """
+        Request a full domain list sync from dmarcreport.
+
+        Publishes to spf:domains:sync_request channel. dmarcreport should
+        listen on this channel and respond by publishing to spf:domains:list.
+
+        Returns True if request was published, False otherwise.
+        """
+        if not self._redis:
+            logger.warning("Cannot request sync: Redis not available")
+            return False
+
+        try:
+            payload = json.dumps(
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "current_count": len(self._domains),
+                }
+            )
+            subscribers = await self._redis.publish(
+                CHANNEL_DOMAINS_SYNC_REQUEST, payload
+            )
+            logger.info(f"Sync request published ({subscribers} subscribers)")
+
+            return subscribers > 0
+        except Exception as e:
+            logger.error(f"Failed to publish sync request: {e}")
+            return False
+
+    async def _periodic_sync_loop(self) -> None:
+        """Background task that periodically requests domain list sync."""
+        logger.info(f"Periodic sync started (interval: {self._sync_interval}s)")
+
+        # Request sync on startup
+        await asyncio.sleep(5)  # Brief delay to let dmarcreport connect
+        await self.request_sync()
+
+        try:
+            while True:
+                await asyncio.sleep(self._sync_interval)
+                await self.request_sync()
+        except asyncio.CancelledError:
+            logger.info("Periodic sync stopped")
+            raise
 
     async def _pubsub_listener_loop(self) -> None:
         """Background task that listens for Pub/Sub messages."""

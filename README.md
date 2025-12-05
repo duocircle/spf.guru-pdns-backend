@@ -31,6 +31,8 @@ All configuration is done via environment variables:
 | `REDIS_IP` | Redis server IP (enables caching + Pub/Sub) | (none) |
 | `REDIS_PORT` | Redis server port | `6379` |
 | `REDIS_DB` | Redis database number | `0` |
+| `SYNC_ENABLED` | Enable periodic sync requests to dmarcreport | `false` |
+| `SYNC_INTERVAL` | Interval (seconds) for sync requests (if enabled) | `300` |
 | `BUNNY_DB_URL` | Database logging URL | (none) |
 | `BUNNY_DB_TOKEN` | Database logging token | (none) |
 | `SENTRY_DSN` | Sentry DSN for error tracking | (none) |
@@ -47,32 +49,51 @@ When `REDIS_IP` is configured, the backend uses Redis for:
 
 ### Pub/Sub Channels
 
-The backend subscribes to these channels for real-time whitelist updates:
+**Incoming** (SPF Guru subscribes):
 
 | Channel | Message Format | Description |
 |---------|---------------|-------------|
-| `spf:domains:list` | `domain1,domain2,...` | Replace entire whitelist |
-| `spf:domains:add` | `domain` | Add single domain |
-| `spf:domains:remove` | `domain` | Remove domain and invalidate cache |
+| `spf:domains:list` | `{"domains": [...]}` | Replace entire whitelist |
+| `spf:domains:add` | `{"domain": "..."}` | Add single domain |
+| `spf:domains:remove` | `{"domain": "..."}` | Remove domain and invalidate cache |
+
+**Outgoing** (SPF Guru publishes, when `SYNC_ENABLED=true`):
+
+| Channel | Message Format | Description |
+|---------|---------------|-------------|
+| `spf:domains:sync_request` | `{"timestamp": "...", "current_count": N}` | Request full sync from dmarcreport |
+
+When enabled, SPF Guru requests sync on startup and every `SYNC_INTERVAL` seconds.
 
 See [docs/DMARCREPORT_INTEGRATION.md](docs/DMARCREPORT_INTEGRATION.md) for integration details.
 
 ### Testing Pub/Sub
 
-A Ruby script is provided for testing Pub/Sub integration:
+Two testing services are available (under `testing` profile):
 
+**1. dmarcreport-sim** - Auto-listener that seeds domains and responds to sync requests:
 ```bash
-# Using Docker Compose
-docker compose --profile testing up pubsub-tester
+# Start backend + dmarcreport simulator
+docker compose --profile testing up -d backend dmarcreport-sim
 
-# Or run directly with Ruby
-ruby scripts/test_pubsub.rb
-
-# With custom Redis host
-REDIS_HOST=localhost ruby scripts/test_pubsub.rb
+# View logs
+docker logs -f spf-guru-dmarcreport-sim
 ```
 
-The script provides an interactive menu to publish test messages to all channels.
+**2. pubsub-tester** - Interactive mode for manual testing:
+```bash
+# Start interactive tester
+docker compose --profile testing run --rm pubsub-tester
+
+# Commands in interactive mode:
+#   add example.com    - Add domain + publish
+#   remove example.com - Remove domain + publish
+#   show               - Compare local store vs SPF Guru
+#   sync               - Force full sync
+#   listen             - Start listening for sync requests
+```
+
+The simulator maintains a local domain store (`test:dmarcreport:domains`) and responds to SPF Guru's sync requests automatically.
 
 ### Health Check
 

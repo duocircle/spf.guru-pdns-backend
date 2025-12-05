@@ -4,8 +4,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: spf-guru-redis
-    # ports:
-    #   - "6376:6379"
+    ports:
+      - "6376:6379"
     volumes:
       - redis-data:/data
     networks:
@@ -52,23 +52,52 @@ services:
         condition: service_healthy
     command: ["uvicorn", "spf_guru.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
-  # Ruby test service for Pub/Sub testing
-  pubsub-tester:
+  # dmarcreport simulator - listens for sync requests and responds automatically
+  dmarcreport-sim:
     image: ruby:3.2-alpine
-    container_name: spf-guru-pubsub-tester
+    container_name: spf-guru-dmarcreport-sim
     working_dir: /app
     volumes:
       - ./scripts:/app
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_DB=0
     networks:
       - spf-guru-network
     depends_on:
       redis:
         condition: service_healthy
-    entrypoint: ["sh", "-c"]
-    command: ["gem install redis && echo 'Ready! Run: docker exec -it spf-guru-pubsub-tester ruby test_pubsub.rb interactive' && tail -f /dev/null"]
+    command: >
+      sh -c "gem install redis --no-document &&
+      echo 'Seeding test domains...' &&
+      ruby test_pubsub.rb seed example.com google.com microsoft.com &&
+      echo 'Starting sync request listener...' &&
+      ruby test_pubsub.rb listen"
+    profiles:
+      - testing
+    restart: unless-stopped
+
+  # Interactive tester - for manual testing
+  pubsub-tester:
+    image: ruby:3.2-alpine
+    container_name: spf-guru-pubsub-tester
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./scripts:/app
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+    networks:
+      - spf-guru-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "gem install redis --no-document && ruby test_pubsub.rb"
     profiles:
       - testing
 
