@@ -354,6 +354,8 @@ You have two options for keeping domains in sync:
 1. **Push from dmarcreport** (recommended) - Run a periodic job on your side that publishes to `spf:domains:list`
 2. **Pull from SPF Guru** - Enable `SYNC_ENABLED=true` on SPF Guru and set up a listener on `spf:domains:sync_request`
 
+No matter how it is handled, if you get a change that is larger than a few lines do not apply this change, wait for confirmation. We dont want to break things because of a bad sync. 
+
 Option 1 is simpler as it doesn't require an additional listener process.
 
 ### Redis Connection
